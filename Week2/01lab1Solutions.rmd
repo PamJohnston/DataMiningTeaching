@@ -1,0 +1,340 @@
+---
+title: "Lab: classification trees - feedback solutions"
+author: "Ines Arana"
+date: "September 2023"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Clearing the environment
+
+```{r}
+# remove everything
+rm(list=ls())
+
+```
+
+
+### Loading required packages
+
+```{r message =F}
+library(caret)
+library(rattle)
+```
+
+
+### Loading the data - note the paths! If contactLenses.csv is in the same folder as this .rmd file, then it should all work out ok. Otherwise, you will need to add a path to the file name.
+
+```{r}
+contactLenses <- read.csv("contactLenses.csv", header = T, stringsAsFactors = T)
+View(contactLenses)
+levels(contactLenses$tearProductionRate)
+```
+
+
+Creating a dataframe with new data (one row). Note that the headings are just like those in contactLenses.csv.
+
+```{r}
+newData <- data.frame(age="young", prescription ="myope", astigmatism="no", tearProductionRate="very reduced", contactLenses="no", stringsAsFactors=T)
+
+levels(newData$tearProductionRate)
+```
+
+Merging the 2 datasets (contactLenses and newData).
+
+```{r}
+contactLenses <- rbind(contactLenses, newData)
+levels(contactLenses$tearProductionRate)
+```
+
+Changing the value of tearProductionRate for the 25th instance (that's our new instance) to normal. Are there any "very reduced" values in the table now?
+
+```{r}
+contactLenses$tearProductionRate[25] <- "normal"
+levels(contactLenses$tearProductionRate)
+```
+
+Dropping levels for tearProductionRate- only values currently in the dataset will be allowed now.
+
+```{r}
+contactLenses$tearProductionRate <- droplevels(contactLenses$tearProductionRate)
+levels(contactLenses$tearProductionRate)
+```
+
+The code below will give a red error because "very reduced" is not one of the allowed values.
+
+```{r error=T}
+contactLenses$tearProductionRate[25] <- "very reduced"
+```
+Adding a new value (very reduced) to the set of allowed values (levels) for tearProductionRate. What does c() do? It concatenates.
+
+```{r}
+levels(contactLenses$tearProductionRate) <- c(levels(contactLenses$tearProductionRate),"very reduced")
+
+levels(contactLenses$tearProductionRate)
+```
+
+Changing the value of tearProductionRate for the 25th instance (our newly added instance) to very reduced, which is now allowed.
+
+```{r}
+contactLenses$tearProductionRate[25] <- "very reduced"
+```
+
+### Checking the datasets
+
+```{r}
+library(help="datasets")
+# co2
+```
+
+### The WeatherPlay dataset
+
+Viewing the dataset
+
+```{r}
+# To view it in the console
+
+data("WeatherPlay", package = "partykit")
+View(WeatherPlay)
+
+```
+
+Checking its dimensions
+
+```{r}
+dim(WeatherPlay)
+```
+
+Finding out about the attributes in the WeatherPlay dataset - oh look! It's the dataset from the lecture! We know how to manually make a decision tree.
+
+```{r}
+attributes(WeatherPlay)
+```
+
+Obtaining  the number of instances in the weather dataset (do you remember from the lecture?)
+
+```{r}
+nrow(WeatherPlay)
+```
+
+### Applying C5.0Tree to the WeatherPlay dataset and viewing the results
+Please do take a minute to try to interpret the results.How many nodes are on the graph? What do you think controls that? Beware the scroll widget!
+
+```{r}
+set.seed(123)
+c5model <- train(play ~ .,
+	data = WeatherPlay,
+	method = "C5.0Tree", 
+	trControl = trainControl(method = "cv", number = 2))
+# To see the results	
+summary(c5model$finalModel)
+print(c5model$results)
+```
+
+The decision tree has "outlookovercast" as the root node. 
+
+If the outlook is overcast, answer yes. 
+
+If the outlook is not overcast, then if windy is not true, answer yes. Otherwise answer no.
+
+# Exercise 1
+
+Applying C5.0Rules to WeatherData and viewing the results.
+
+```{r}
+set.seed(123)
+c5Rules <- train(play ~ .,
+	data = WeatherPlay,
+	method = "C5.0Rules", 
+	trControl = trainControl(method = "cv", number = 5))
+	
+summary(c5Rules$finalModel)
+print(c5Rules$results)
+```
+
+
+
+
+### Using the Segmentation Data dataset (no file, it's part of R packages, but it might help to View it to see what it contains)
+
+```{r}
+data(segmentationData)
+View(segmentationData)
+```
+
+### Exercise 2.1
+
+```{r}
+#removing useless attribute Cell
+segmentationData$Cell <- NULL
+```
+
+### Exercise 2.2
+
+```{r}
+# splitting the data into training and testing. 
+STrain <- subset(segmentationData, Case == "Train")
+STest <- subset(segmentationData, Case == "Test")
+
+```
+
+### Exercise 2.3
+
+```{r}
+# Removing the now useless Case attribute.
+STrain$Case <- NULL
+STest$Case <- NULL
+```
+
+### Exercise 2.4
+
+Building a C5.0Tree model using the segmentationData training set (as split into STrain and STest) and viewing the results.
+
+```{r}
+control2 = trainControl(method="cv", number=5)
+set.seed(123)
+Smodel <- train(Class ~ .,
+	data = STrain,
+	method = "C5.0Tree", 
+	trControl = control2)
+		
+summary(Smodel$finalModel)
+summary(Smodel$results)
+
+```
+
+
+The model is likely to have a worse performance on unseen data.
+
+Testing the previous model on the testing set (STest)
+
+```{r}
+TestRes <- predict(Smodel, newdata = STest, type="raw")
+confusionMatrix(TestRes, STest$Class)
+```
+
+### Exercise 2.5
+
+The dataset is assumed to be in the current working directory.
+
+```{r}
+contactLenses <- read.csv("contactLenses.csv", header = T, stringsAsFactors = T)
+diabetes <- read.csv("diabetes.csv", header= T, stringsAsFactors = T)
+View(contactLenses)
+
+```
+
+### Exercise 2.6
+
+#### Using the contact lenses dataset - note that the "class" column is called contactLenses and that control2 is set further up - that means that we've got the same training control parameters for different models - that makes them more comparable.
+
+```{r}
+set.seed(123)
+c5TreeContacts <- train(contactLenses ~ .,
+                data = contactLenses,
+				method = "C5.0Tree", 
+				metric = "Accuracy",
+				trControl = control2)
+				  
+summary(c5TreeContacts$finalModel)
+
+```
+
+```{r}
+set.seed(123)
+c5RulesContacts <- train(contactLenses ~ .,
+                data = contactLenses,
+				method = "C5.0Rules", 
+				metric = "Accuracy",
+				trControl = control2)
+				  
+summary(c5RulesContacts$finalModel)
+
+
+
+```
+
+So the  algorithms gave the same  results.
+
+#### Using the diabetes dataset
+
+
+```{r}
+
+set.seed(123)
+C5TreeDiabetes <- train(class ~ .,
+                data = diabetes,
+				method = "C5.0Tree", 
+				metric = "Accuracy",
+				trControl = control2)
+				  
+summary(C5TreeDiabetes$finalModel)
+
+```
+
+```{r}
+set.seed(123)
+C5RulesDiabetes <- train(class ~ .,
+                data = diabetes,
+				method = "C5.0Rules", 
+				metric = "Accuracy",
+				trControl = control2)
+				  
+summary(C5RulesDiabetes$finalModel)
+```
+
+You should check where errors are and also the size of the tree/rule set.
+
+
+### Exercise 2.7
+
+
+```{r}
+set.seed(123)
+j48ContactL <- train(contactLenses ~ .,
+               data = contactLenses,
+               method = "J48", 
+               metric = "Accuracy",
+               trControl = control2)
+summary(j48ContactL$finalModel)
+plot(j48ContactL$finalModel)
+
+```
+
+```{r}
+set.seed(123)
+j48Diab <- train(class ~ .,
+               data = diabetes,
+               method = "J48", 
+               metric = "Accuracy",
+               trControl = control2)
+summary(j48Diab$finalModel)
+plot(j48Diab$finalModel)
+
+```
+
+### Exercise 2.8
+
+```{r}
+set.seed(123)
+rPart <- train(class ~ .,
+               data = diabetes,
+               method = "rpart", 
+               metric = "Accuracy",
+               trControl = control2)
+summary(rPart$finalModel)
+fancyRpartPlot(rPart$finalModel)
+
+```
+
+
+
+
+
+
