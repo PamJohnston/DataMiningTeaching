@@ -1,0 +1,553 @@
+---
+title: "Decision tree options"
+author: "PJ"
+date: '2024-09-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Cleaning the working environment.
+
+```{r}
+rm(list=ls())
+```
+
+Loading the required libraries.
+
+```{r}
+library(caret)
+library(C50)
+library(rattle)
+library(partykit)
+# To use the iris dataset the datasets package is needed
+library(datasets)
+```
+
+# C5.0 model options
+
+### The WeatherPlay dataset
+
+Using dataset WeatherPlay in library partykit.
+
+```{r}
+# To view it in the console
+data("WeatherPlay", package = "partykit")
+
+```
+
+
+
+### Applying C5.0Tree to the WeatherPlay dataset and viewing the results
+
+
+This is how C5.0Tree has been used in previous labs. No options used.
+
+```{r}
+# Defining the train control
+control1 <- trainControl(method = "cv", number = 2)
+
+# Running the algorithm
+set.seed(123)
+c5model <- train(play ~ .,
+	data = WeatherPlay,
+	method = "C5.0Tree", 
+	trControl = control1)
+summary(c5model$finalModel)
+```
+
+
+### Exercise 1
+
+Applying C5.0Rules to labor and viewing the results.
+
+First, load the dataset.
+
+```{r}
+labor <- read.csv("labor.csv", header = T, stringsAsFactors=T)
+```
+
+
+As it will give an error to run the data "as is" this section has eval=F so that knitting the file works. This setting means the code will be shown, but not run when knitting. The error is due to missing values in the dataset.
+
+```{r, eval=F}
+# set to not evaluate when knitting (eval=F) as it will 
+# give an error because of the missing values in the dataset.
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	trControl = control1)
+	
+summary(c5Tree$finalModel)
+
+```
+
+### Exercise 2
+
+Dealing with missing values. Ask the algorithm to deal with them.
+
+```{r}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1)
+summary(c5Tree$finalModel)
+
+```
+
+### Dealing with missing values by removing instances
+
+Dealing with missing values by removing the instances containing any. Not enough instances are left so an error will be issued. Hence eval=F so that the code is not run when knitting.
+
+```{r, eval = F}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.omit,
+	trControl = control1)
+summary(c5Tree$finalModel)
+
+```
+
+### Prunning confidence factor
+
+Changing the confidence factor to 0.35
+
+```{r}
+control1 <- trainControl(method = "cv", number = 5)
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1,
+  control = C5.0Control(CF = 0.35 ))	
+summary(c5Tree$finalModel)
+
+```
+
+Changing the confidence factor to 0.15
+
+```{r}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1,
+  control = C5.0Control(CF = 0.15 ))	
+summary(c5Tree$finalModel)
+
+```
+
+Changing the confidence factor to 0.1
+
+```{r}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1,
+  control = C5.0Control(CF = 0.1 ))	
+summary(c5Tree$finalModel)
+
+```
+
+Changing the confidence factor to 0.05
+
+```{r}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1,
+  control = C5.0Control(CF = 0.05 ))	
+summary(c5Tree$finalModel)
+
+```
+
+### No Global Prunning option
+
+```{r}
+set.seed(123)
+c5Tree <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree", 
+	na.action= na.pass,
+	trControl = control1,
+  control = C5.0Control(noGlobalPruning = TRUE))
+summary(c5Tree$finalModel)
+
+```
+
+### Minimum cases option
+
+Running C5.0 Tree on the WeatherPlay dataset with default options.
+
+
+```{r}
+set.seed(123)
+c5model <- train(play ~ .,
+	data = WeatherPlay,
+	method = "C5.0Tree", 
+	trControl = control1)
+	
+summary(c5model$finalModel)
+
+```
+
+Changing the minimum number of instances (cases)  to 1.
+
+```{r}
+set.seed(123)
+c5model <- train(play ~ .,
+	data = WeatherPlay,
+	method = "C5.0Tree", 
+	trControl = control1,
+  	control = C5.0Control(minCases=1))
+	
+summary(c5model$finalModel)
+
+```
+
+### Attribute selection
+
+Set winnow to true to select attributes before the C5.0Tree algorithm is applied.
+
+
+```{r}
+set.seed(123)
+c5model <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree",
+	na.action = na.pass,
+	trControl = control1,
+  control = C5.0Control(winnow = TRUE))
+	
+summary(c5model$finalModel)
+```
+
+
+### Attribute/variable importance
+
+```{r}
+predictors(c5model)
+varImp(c5model)
+
+```
+
+### Exercise 3
+
+Use different settings for minCases. 
+
+Using  minCases = 1 
+
+```{r}
+set.seed(123)
+c5model <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree",
+	na.action = na.pass,
+	trControl = control1,
+  control = C5.0Control(minCases=1))
+	
+summary(c5model$finalModel)
+predictors(c5model)
+varImp(c5model)
+```
+
+The tree has levels 0 (with WageIncY1), 1 with LTDIyes) and 2 (with Holidays), as well as the leaves of the tree (i.e. the solutions). The attribute usage is 
+
+98.25% WageIncY1
+
+42.11% Holidays
+
+36.84% LTDIyes
+
+The importance of the variables is
+
+WageIncY1              100.00
+
+Holidays                42.86
+
+LTDIyes                 37.50
+
+Using minCases = 5
+
+```{r}
+set.seed(123)
+c5model <- train(Class ~ .,
+	data = labor,
+	method = "C5.0Tree",
+	na.action = na.pass,
+	trControl = control1,
+  control = C5.0Control(minCases=5))
+	
+summary(c5model$finalModel)
+predictors(c5model)
+varImp(c5model)
+```
+
+The tree has the same number of levels as in the previous example (with minCases=1) but the tree is different. 
+
+There is one less error (in classifying a bad as good). 
+
+Only 2 attributes are used as follows:
+
+
+98.25% WageIncY1
+
+68.42% Holidays
+
+The importance of variables is 
+
+WageIncY1     100.00
+
+Holidays       69.64
+
+so compared to the previous case, LTDIyes is no longer important, and Holidays has increased its importance.
+
+
+### Exercise 4
+
+This exercise is a practice exercise with other datasets and lots of different settings for C5.0Tree options. Each student will have different code. 
+
+
+
+# J48 model options
+
+
+Applying J48 to the WeatherPlay dataset within Caret.
+
+```{r}
+set.seed(123)
+j48Tree <- train(play ~ .,
+	data = WeatherPlay,
+	method = "J48", 
+	trControl = control1)
+summary(j48Tree$finalModel)
+plot(j48Tree$finalModel)
+```
+
+J48 on the WeatherPlay dataset with  M=3 and C=0.25.
+
+```{r}
+set.seed(123)   # ensure reproducibility of results
+
+j48Tree2 <- train(play ~ .,
+	data = WeatherPlay,
+	method = "J48", 
+	trControl = control1,
+	tuneGrid = expand.grid(M = 3, C = 0.25))
+
+summary(j48Tree2$finalModel)
+print(j48Tree2$results)
+
+plot(j48Tree2$finalModel)
+
+```
+
+
+J48 on the WeatherPlay dataset with several combinations of parameter values.
+
+```{r}
+set.seed(123)   # ensure reproducibility of results
+
+j48Tree3 <- train(play ~ .,
+	data = WeatherPlay,
+	method = "J48", 
+	trControl = control1,
+	tuneGrid = expand.grid(M = c(2,3,4,5), C = 0.25))
+
+summary(j48Tree3$finalModel)
+print(j48Tree3$results)
+
+plot(j48Tree3$finalModel)
+
+```
+
+
+### Exercise 5
+
+Running the classifiers with several different settings on the 3 datasets. 
+
+
+##### Diabetes dataset
+
+Loading diabetes dataset
+
+```{r}
+diabetes <- read.csv("diabetes.csv", stringsAsFactors=TRUE)
+```
+
+
+Running J48 on the diabetes dataset with several combinations of parameter values.
+
+```{r}
+set.seed(123)
+j48DiabTree <- train(class ~., data= diabetes, na.action=NULL,
+                      method = "J48", 
+                      trControl = control1,
+                      tuneGrid = expand.grid(M = c(2,3,4,5), C = c(0.15,0.25)))
+
+print(j48DiabTree$results)
+summary(j48DiabTree$finalModel)
+plot(j48DiabTree$finalModel)
+```
+
+##### Iris dataset
+
+```{r}
+set.seed(123)
+j48IrisTree <- train(Species ~., data= iris, na.action=NULL,
+                      method = "J48", 
+                      trControl = control1,
+                      tuneGrid = expand.grid(M = c(2,3,4,5), C = c(0.15,0.25)))
+
+print(j48IrisTree$results)
+summary(j48IrisTree$finalModel)
+plot(j48IrisTree$finalModel)
+```
+                 
+
+##### Contact lenses dataset
+
+
+```{r}
+contactLenses <- read.csv("contactLenses.csv", stringsAsFactors= TRUE)
+```
+
+
+```{r}
+set.seed(123)
+j48contactsTree <- train(contactLenses ~., data= contactLenses, na.action=NULL,
+                      method = "J48", 
+                      trControl = control1,
+                      tuneGrid = expand.grid(M = c(2,3,4,5), C = c(0.15,0.25)))
+
+print(j48contactsTree$results)                                                              
+summary(j48contactsTree$finalModel)
+plot(j48contactsTree$finalModel)
+```
+
+### Exercise 6
+
+##### Loading the labor dataset.
+
+```{r}
+labor <- read.csv("labor.csv", header = T, stringsAsFactors=T)
+```
+
+```{r eval=F}
+
+# Running the algorithm
+set.seed(123)
+j48ModLab <- train(class ~ .,
+               data = labor,
+               method = "J48", 
+               na.action = na.pass,
+               trControl = control1)
+summary(j48ModLab$finalModel)
+print(j48ModLab$results)
+
+```
+
+
+J48 cannot handle the missing values.
+
+### rpart 
+
+
+```{r}
+# Defining the train control
+library(rattle)
+control1 <- trainControl(method = "cv", number = 5)
+```
+
+##### rpart with default setting on the diabetes dataset
+
+```{r}
+set.seed(123)
+rPartMod <- train(class ~ .,
+               data = diabetes,
+               method = "rpart", 
+               trControl = control1)
+summary(rPartMod$finalModel)
+print(rPartMod$results)
+fancyRpartPlot(rPartMod$finalModel)
+
+
+```
+
+##### rpart with various complexity parameter values with the diabetes dataset
+
+```{r}
+# Running the algorithm
+set.seed(123)
+rPartMod <- train(class ~ .,
+               data = diabetes,
+               method = "rpart", 
+               tuneGrid = expand.grid(cp=c(0.01,0.005,0.001)),
+               trControl = control1)
+summary(rPartMod$finalModel)
+print(rPartMod$results)
+fancyRpartPlot(rPartMod$finalModel)
+```
+
+##### rpart with the labor dataset
+
+```{r eval=F}
+
+# Running the algorithm
+set.seed(123)
+rPartMod <- train(class ~ .,
+               data = labor,
+               method = "rpart", 
+               na.action = na.pass,
+               tuneGrid = expand.grid(cp=c(0.01,0.005,0.001)),
+               trControl = control1)
+summary(rPartMod$finalModel)
+print(rPartMod$results)
+fancyRpartPlot(rPartMod$finalModel)
+```
+
+
+```{r}
+
+# Running the algorithm
+set.seed(123)
+rPartMod <- train(Species ~ .,
+               data = iris,
+               method = "rpart", 
+               na.action = na.pass,
+               tuneGrid = expand.grid(cp=c(0.01,0.005,0.001)),
+               trControl = control1)
+summary(rPartMod$finalModel)
+print(rPartMod$results)
+fancyRpartPlot(rPartMod$finalModel)
+```
+
+##### rpart on the contact lenses dataset
+
+```{r}
+
+# Running the algorithm
+set.seed(123)
+rPartMod <- train(contactLenses ~., 
+               data= contactLenses,
+               method = "rpart", 
+               na.action = na.pass,
+               tuneGrid = expand.grid(cp=c(0.01,0.005,0.001)),
+               trControl = control1)
+summary(rPartMod$finalModel)
+print(rPartMod$results)
+fancyRpartPlot(rPartMod$finalModel)
+```
