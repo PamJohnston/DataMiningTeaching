@@ -1,0 +1,336 @@
+---
+title: "07 Lab 7 - association rules"
+author: "Pamela Johnston"
+date: "2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list=ls())
+library("arules")
+library("arulesViz")
+```
+
+```{r}
+data("Groceries")
+```
+
+Checking the dataset - lots of instances, lots of attributes!
+
+```{r}
+summary(Groceries)
+View(Groceries)
+```
+
+
+Apply apriori algorithm with a support of 0.1% and a confidence of 50%.
+
+```{r}
+rules <- apriori(Groceries, parameter=list(support=0.001, confidence=0.5))
+```
+
+Selecting 1st 10 rules sorted by lift.
+
+```{r}
+inspect(head(sort(rules, by ="lift"),10))
+```
+Have a look at those rules and interpret them. It's a huge dataset and the baskets are very diverse, so the "support" for each is quite small.Lift gives a good indication of how much more probably this rule is than random chance would suggest.
+Can you see evidence of people baking their own cakes? Can you see recipes or habits embedded in the rules? Like if you want some snacks to eat while watching a movie (but you probably won't bake a cake that night). Or you usually have sandwiches in a packed lunch so need to stock up for the week (quite a few baskets with things for sandwich making)?
+
+Notice how many items in the itemsets at the top.
+
+
+Selecting 1st 15 rules sorted by confidence.
+
+```{r}
+inspect(head(sort(rules, by ="confidence"),15))
+```
+Remember what "confidence" actually means. It is the proportion of instances that have the antecedent that also have the consequent. So these baskets look a little more...specialist. And the rules look a little more specialist. That's a consequence of having such a low support requirement. 0.1% of 9835 instances is only about 10 baskets (count). This might indicate people with bigger baskets in general - they're doing a weekly or monthly shop so have many diverse items in their basket.
+
+Notice that confidence gives slightly bigger itemsets, but the lift isn't as high.
+
+```{r}
+redundant <- is.redundant(rules, measure = "lift")
+
+# remove redundant rules - i.e. exclude rules in "redundant" from set 
+rules <- rules[!redundant]
+
+```
+
+
+## Exercise - comparing 1st 4 rules using lift with those obtained using confidence
+
+```{r}
+# Selecting 1st 4 rules sorted by lift
+inspect(head(sort(rules, by ="lift"),4))
+
+# Selecting 1st 4 rules sorted by confidence
+inspect(head(sort(rules, by ="confidence"),4))
+```
+The rules are very different. With lift, the rules are quite varied. With confidence, all rules conclude whole milk. Statistically, this could tell you that milk appears in a whole lot of baskets.
+
+### check quality of rules
+
+```{r}
+quality(rules)
+```
+
+Check quality of rules - first few
+
+```{r}
+head(quality(rules))
+```
+
+Generally rules with high lift have low support (they are specialised and relatively rare in the dataset).
+
+The most interesting rules in support/confidence border. Plotting the rules.
+
+```{r}
+plot(rules)
+```
+
+
+Plotting support against lift with confidence as colour intensity.
+
+```{r}
+plot(rules, measure=c("support", "lift"), shading="confidence")
+```
+
+
+Plotting  the size of the itemsets.
+
+```{r}
+plot(rules, shading="order")
+```
+
+## Exercise 2
+
+Plotting the  size of itemsets for support against lift.
+
+```{r}
+plot(rules, measure=c("support", "lift"), shading="order")
+```
+
+## Exercise 3
+
+Plotting the  size of itemsets for confidence against lift.
+
+```{r}
+plot(rules, measure=c("confidence", "lift"), shading="order")
+```
+Why might the graph be this shape? It seems that the points form straight lines indicating that there is a (straight line) relationship between confidence and lift. You could use the equation of a straight line to figure out why this pattern occurs.
+
+
+Support and confidence. The color intensity of the points indicates "order" i.e., the number of items contained in the rule.
+ 
+ 
+```{r}
+plot(rules, shading="order", control=list(main = "Rule size - support vs confidence"))
+```
+
+# Interactive plot - scatterplot
+
+The code below must be run on the console, after having run the apriori algorithm on the dataset. It is commented out here.
+
+```{r}
+# plot(rules, measure=c("support", "lift"), shading="confidence", engine ="interactive")
+
+##or
+
+#plot(rules, measure=c("support", "lift"), shading="confidence", engine ="htmlwidget")
+```
+
+
+### Selecting rules 
+
+Selecting only those with a confidence of at least 75%.
+
+```{r}
+confrules <- rules[quality(rules)$confidence >= 0.75]
+confrules
+plot(confrules)
+```
+
+## Exercise 4
+
+Select rules conf >=70%, lift >= 6.
+
+```{r}
+confrules <- rules[quality(rules)$confidence >= 0.70]
+confliftrules <- confrules[quality(confrules)$lift >= 6]
+plot(confliftrules)
+```
+
+## Exercise 5 - Interactive plot
+
+Note that the code below will only run on the console window so it is commented out here.
+
+```{r}
+# plot(confrules, measure=c("support", "confidence"), engine ="htmlwidget")
+```
+
+## Matrix plots
+
+Rules with confidence of at least 80%
+
+```{r}
+confrules <- rules[quality(rules)$confidence >= 0.8]
+
+
+plot(confrules, method="matrix", measure="lift")
+```
+Interpreting the above: Notice that actual items are given matrice indexes. There are 6 items on the RHS (the consequent) and instead of including their names in the plot, we include their index. You might try an interactive plot to make this easier to understand (in the console, put the following)
+plot(rules, method = "matrix", measure="lift", engine = "htmlwidget")
+
+
+Reordering for changed visuals.
+
+```{r}
+plot(confrules, method="matrix", measure="lift", control=list(reorder='support/confidence'))
+```
+
+## Exercise 6
+
+Matrix with lift of at least 7. 
+
+```{r}
+liftrules <- rules[quality(rules)$lift >= 7]
+plot(liftrules, method="matrix", measure="confidence")
+```
+
+Reordering for changed visuals. Try other options, e.g. 'support/confidence' or 'measure'.
+
+```{r}
+plot(liftrules, method="matrix", measure="confidence", control=list(reorder='similarity'))
+```
+
+
+
+
+## 3D Matrices
+
+Using a 3D matrix
+
+```{r}
+plot(confrules, method="matrix", engine = '3d', measure="lift")
+```
+
+Reordering with support/confidence.
+
+```{r}
+plot(confrules, method="matrix", engine = '3d', measure="lift", 		control=list(reorder='support/confidence'))
+```
+
+
+Reordering with similarity.
+
+```{r}
+plot(confrules, method="matrix", engine = '3d',  measure="lift", control=list(reorder='similarity'))
+```
+
+
+## Using 2 mesures together with colour and luminance
+
+```{r}
+plot(confrules, method="matrix", measure=c("lift", "confidence"))
+```
+
+
+Reordering - you may use other options
+
+```{r}
+plot(confrules, method="matrix", measure=c("lift", "confidence"), control=list(reorder='support/confidence'))
+```
+
+
+
+## parallel coordinates
+
+The width of the arrows  show the support and the intensity of the color shows the confidence.
+
+```{r}
+liftrules <- head(sort(rules, by="lift"), 10)
+plot(liftrules, method="paracoord")
+```
+
+
+Reordering - note difference in ordering statement.
+
+```{r}
+plot(liftrules, method="paracoord", control=list(reorder=TRUE))
+```
+What do the above show? Fatter arrows have more support. Darker arrows have higher confidence. The consequent is a 1-itemset for each. They show the path that drove people to their destination (i.e. the antecedents that drove to the consequent). You might be able to see similar patterns (out of order) in one of these plots.For market basket data, they might reflect the path through the supermarket (assuming the basket data is in the order it was placed in the basket).
+
+As they get longer, they also get fainter (makes sense - every time we add an itemset to a rule, it becomes less likely, so lower confidence and lower lift).
+
+Like hair, parallel lines (combed hair) indicate a positive relationship between items. They appear in many rules. 
+
+## Exercise 7
+
+```{r}
+suprules <- head(sort(rules, by="support"), 100)
+```
+
+## Exercise 8
+
+```{r}
+confrules <- suprules[quality(suprules)$confidence >= 0.6]
+liftrules <- confrules[quality(confrules)$lift >=3]
+
+## Change the 3 above to a 2 to follow exercise 10.
+```
+
+## Exercise 9
+
+```{r}
+plot(liftrules)
+```
+
+Using the interactive plot the code will be as follows - to run, use the console, uncommenting the code.
+
+```{r}
+
+# plot(liftrules, measure=c("support", "confidence"), shading="lift", engine ="htmlwidget")
+```
+
+Exercise 10:
+You get more rules with a lower confidence and a lower lift.
+With more rules comes higher maximum support (i.e. the x-axis has a higher value, and you can see your previous plot still exists, it's like you've zoomed out).
+
+
+Final Exercise:
+The code is below, but what you might want to do is play around with different support.
+
+```{r}
+
+butterWhiteBread <- apriori(Groceries, parameter=list(support=0.001, confidence=0.5),
+	appearance = list(rhs=c("butter", "white bread"), default="lhs"),
+	control = list(verbose=F))
+
+## Removing redundant
+redundant <- is.redundant(butterWhiteBread, measure = "lift")
+# remove redundant rules - i.e. exclude rules in "redundant" from set 
+butterWhiteBreads <- butterWhiteBread[!redundant]
+
+inspect(head(sort(butterWhiteBread, by ="lift"),15))
+
+```
+
+```{r}
+
+butterWhiteBreadWholeMilk <- apriori(Groceries,
+                                     parameter=list(support=0.001,
+                                                    confidence=0.5),
+                                     appearance = list(lhs=c("butter",
+                                                             "white bread"), 
+                                                       rhs=c("whole milk")),
+                                     control = list(verbose=F))
+
+inspect(head(sort(butterWhiteBreadWholeMilk, by ="lift"),15))
+
+```
+
