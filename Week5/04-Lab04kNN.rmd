@@ -1,0 +1,456 @@
+---
+title: " Lab: k-Nearest Neighbour - code plus a few comments"
+author: "Ines Arana"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Clearing the workspace and setting the working directory.
+
+```{r warning = F}
+rm(list=ls())
+
+```
+
+Loading required packages.
+
+```{r warning = F}
+library(caret)
+library(mlbench)
+library(partykit)
+```
+
+Using the PimaIndiansDiabetes dataset.
+
+```{r}
+data(PimaIndiansDiabetes)
+```
+
+## Using various settings - LOOCV and 10-fold cross validation with various k values.
+
+### Using leave one out
+```{r}
+ctrl1 <- trainControl(method="LOOCV", number=25)
+```
+
+```{r}
+View(PimaIndiansDiabetes)
+```
+
+
+```{r}
+set.seed(123)
+mod11.knn<- train(diabetes~., data=PimaIndiansDiabetes, 
+		method="knn", trControl=ctrl1)
+print(mod11.knn)
+print(mod11.knn$results)
+plot(mod11.knn, type="p")
+```
+
+Get results for best k (9) and produce a confusion matrix.
+
+```{r}
+#Getting the results
+results1 <- (mod11.knn$pred[mod11.knn$pred$k == mod11.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results1$k <- NULL
+results1$rowIndex <- NULL
+# Produce the confusion matrix.
+table(results1)
+```
+
+#### Using k values between 1 and 20
+
+```{r}
+set.seed(123)
+mod21.knn<- train(diabetes~., data=PimaIndiansDiabetes, 
+		method="knn", tuneGrid=expand.grid(k=1:20), trControl=ctrl1)
+
+print(mod21.knn)
+
+plot(mod21.knn)
+```
+
+Best k is 19. Note: if you get a different k (e.g. k=20) you will get this result all the time.
+
+
+## Exercise 1
+
+```{r}
+#Getting the results
+results2 <- (mod21.knn$pred[mod21.knn$pred$k == mod21.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results2$k <- NULL
+results2$rowIndex <- NULL
+
+## Previous table for comparison.
+print("Previous confusion matrix")
+table(results1)
+# Produce the confusion matrix.
+
+print("Confusion matrix for best k between 1 and 20")
+table(results2)
+```
+It can be seen that in the new matrix there are more negatives predicted as negatives whereas the correct positive predictions remains almost identical. This is reducing the number of false positives, but it comes at the expense of 1 fewer true positive. This means that 1 fewer person with diabetes was diagnosed with diabetes. It's probably quite an impactful difference for that one particular person.
+
+### Exercise 2 - Using 10-fold cross validation
+
+
+```{r}
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(123)
+mod12 <- train(diabetes~., data=PimaIndiansDiabetes, method="knn", trControl=ctrl)
+print(mod12)
+plot(mod12)
+```
+
+The best k value  for accuracy is 9. No change in k value.
+
+
+As above but with k values of up to k=20
+
+```{r}
+set.seed(123)
+mod22 <- train(diabetes~., data=PimaIndiansDiabetes, method="knn", tuneGrid=expand.grid(k=1:20), trControl=ctrl)
+print(mod22)
+plot(mod22)
+```
+
+The best k value for accuracy is 19. No change in k value.
+
+```{r}
+cm <- confusionMatrix.train(mod22, norm="none")
+print("Negatives predicted correctly")
+cm[1]$table[1,1]/3
+print("Positives predicted correctly")
+cm[1]$table[2,2]/3
+
+summary(mod22$results)
+```
+
+It can be seen that the best estimated accuracy is 75.78%. From the confusion matrix, there are roughly double the errors misclassifying positive instances than misclassifying negative ones.
+
+The number of correctly classified positive and negative instances are similar to the ones obtained using leave one out.
+
+### Using bootstrap train control (not in exercise sheet)
+
+```{r}
+ctrl <- trainControl(method="boot",number=3)
+set.seed(123)
+mod13 <- train(diabetes~., data=PimaIndiansDiabetes, method="knn",tuneGrid=expand.grid(.k=1:20), trControl=ctrl)
+print(mod13)
+confusionMatrix.train(mod13, norm="average")
+plot(mod13)
+```
+
+The best accuracy is achieved with k=6 with 73.75%. Again there are more errors misclassifying positive cases, although the proportions are a little more balanced between positive and negative misclassifications.
+
+
+### Using k=21 and k=23
+
+```{r}
+set.seed(123)
+mod31 <- train(diabetes~., data=PimaIndiansDiabetes, method="knn", tuneGrid=expand.grid(k=c(21,23)), trControl=ctrl1)
+print(mod31)
+plot(mod31)
+```
+
+k=21 is  best for accuracy.
+
+### Exercise 3 - students to choose datasets themselves and experiment with different k values.
+## Suitable datasets include: Iris, WeatherPlay, or others.
+
+
+## Preprocessing
+
+Check the ranges for numeric values in the PimaIndianDiabetes dataset.
+
+```{r}
+summary(PimaIndiansDiabetes)
+```
+
+
+
+### Normalising numeric values
+
+```{r}
+set.seed(123)
+mod51.knn<- train(diabetes~., data=PimaIndiansDiabetes, 
+		method="knn", tuneGrid=expand.grid(.k=1:20),
+		preProcess=c("range"), trControl=ctrl1)
+
+print(mod51.knn)
+
+plot(mod51.knn, type="p")
+```
+
+The best k value for accuracy is  k=17. 
+
+
+
+```{r}
+#Getting the results
+results <- (mod51.knn$pred[mod51.knn$pred$k ==mod51.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results$k <- NULL
+results$rowIndex <- NULL
+# Produce the confusion matrix.
+table(results)
+
+```
+
+Most errors misclassify positives into negatives, about double the errors on negative misclassifications.
+
+### Centering and scaling numeric values - Standardisation
+
+```{r}
+set.seed(123)
+mod41.knn<- train(diabetes~., data=PimaIndiansDiabetes, 
+		method="knn", tuneGrid=expand.grid(.k=1:20),
+		preProcess=c("center", "scale"), trControl=ctrl1)
+
+print(mod41.knn)
+
+plot(mod41.knn)
+```
+
+The best k value for accuracy is k=20. This is different from the value obtained when using normalisation.
+
+`
+
+Get results for best k and produce a confusion matrix.
+
+```{r}
+#Getting the results
+results <- (mod41.knn$pred[mod41.knn$pred$k ==mod41.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results$k <- NULL
+results$rowIndex <- NULL
+# Produce the confusion matrix.
+table(results)
+
+#summary(mod41.knn$results)
+#summary(mod51.knn$results)
+```
+
+While the accuracy is similar to the one obtained without normalisation, the errors are a little different, with more actual positives misclassified as negatives.
+
+
+### Checking preprocessed dataset
+
+
+#### Normalising numeric values
+
+```{r}
+preProcValuesN <- preProcess(PimaIndiansDiabetes, method = c("range"))
+diabetesNormalised <- predict(preProcValuesN, PimaIndiansDiabetes)
+# checking the results. Use head for knitting so that the results appear
+# in the knitted document. View shows them in a separate window.
+# View(diabetesNormalised)
+head(diabetesNormalised, 15)
+summary(diabetesNormalised)
+```
+
+Checking that  all values on scale [0..1]
+
+```{r}
+summary(diabetesNormalised)
+```
+
+#### Centering and scaling numeric values
+
+```{r}
+preProcValuesCS <- preProcess(PimaIndiansDiabetes, method =c("center", "scale"))
+diabetesCenteredScaled <- predict(preProcValuesCS, PimaIndiansDiabetes)
+#View(diabetesCenteredScaled)
+head(diabetesCenteredScaled, 15)
+```
+
+Checking ranges of values
+
+```{r}
+summary(diabetesCenteredScaled)
+```
+
+## Exercise 4 - WeatherPlay data normalised
+
+
+```{r}
+preProcValues <- preProcess(WeatherPlay, method = c("range"))
+ 
+weatherNorm <- predict(preProcValues, WeatherPlay)
+
+# checking normalised dataset
+head(weatherNorm, 14)
+```
+
+
+
+## Exercise 5 - WeatherPlay data standardised - centered and scaled
+
+```{r}
+preProcWeather <- preProcess(WeatherPlay, method =c("center", "scale"))
+WeatherCenteredScaled <- predict(preProcWeather, WeatherPlay)
+# View(WeatherCenteredScaled)
+head(WeatherCenteredScaled, 14)
+# checking ranges for standardised data
+summary(WeatherCenteredScaled)
+```
+
+
+##  From nominal to binary - one-hot encoding
+
+
+```{r}
+# make a copy
+noClass <-WeatherPlay
+
+# remove the class - it is not transformed
+noClass$play <- NULL
+```
+
+
+
+```{r}
+set.seed(123)
+#binarise nominal attributes - one-hot encoding
+binaryVars <- dummyVars(~ ., data = noClass)
+newWeather <- predict(binaryVars, newdata = noClass)
+
+# add the class to the binarised dataset
+binWeather <-cbind(newWeather, WeatherPlay[5])
+
+# check the results
+# View(binWeather)
+head(binWeather, 14)
+
+```
+
+## Exercise 6
+
+All values are numeric, so they can be normalised.
+
+```{r}
+
+preProcValues <- preProcess(binWeather, method = c("range"))
+ 
+weatherBinNorm <- predict(preProcValues, binWeather)
+
+# checking normalised dataset
+# View(weatherBinNorm)
+head(weatherBinNorm,14)
+```
+
+
+Using kNN on normalised dataset.
+
+```{r}
+# Applying kNN
+set.seed(123)
+mod61.knn<- train(play~., data=weatherBinNorm, 
+		method="knn", preProcess=c("range"), 
+		trControl=ctrl1)
+
+print(mod61.knn)
+
+plot(mod61.knn)
+```
+
+k=5 gives best accuracy. The confusion matrix should be checked.
+```{r}
+#Getting the results
+results <- (mod61.knn$pred[mod61.knn$pred$k ==mod61.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results$k <- NULL
+results$rowIndex <- NULL
+# Produce the confusion matrix.
+table(results)
+
+```
+
+
+## Exercise 7 
+
+All values are numeric, so they can be standardised.
+
+
+```{r}
+preProcessBinScaled <- preProcess(binWeather, method =c("center", "scale"))
+weatherBinScaled <- predict(preProcessBinScaled, binWeather)
+head(weatherBinScaled,14)
+```
+
+Applying kNN to standardised dataset.
+
+```{r}
+set.seed(123)
+mod71.knn<- train(play~., data=weatherBinScaled, 
+		method="knn", preProcess=c("center","scale"), 
+		trControl=ctrl1)
+
+print(mod71.knn)
+
+plot(mod71.knn)
+```
+
+k=5 appears best. The confusion matrix should be checked:
+```{r}
+#Getting the results
+results <- (mod71.knn$pred[mod71.knn$pred$k ==mod71.knn$bestTune$k,])
+#Remove unwanted columns (k and instance number)
+results$k <- NULL
+results$rowIndex <- NULL
+# Produce the confusion matrix.
+table(results)
+```
+
+
+## Exercise 8
+
+Normalisation gives higher accuracy (71.43% vs 64.29%). In both cases, best results were achieved with k=5. Confusion matrices should be compared - what kinds of errors appear? What does that mean for this dataset?
+
+
+
+
+### knn with weights
+
+```{r}
+tg <- expand.grid(kmax = 5:7,            # allows to test a range of k values
+                        distance = 2,        # allows to test a range of distance values
+                      kernel = c(#'gaussian',  # different weighting types in kknn
+                               'triangular',
+                          #    'rectangular',
+                          #    'epanechnikov',
+                               'optimal'))
+set.seed(123)
+mod107.knn<- train(diabetes~., data=PimaIndiansDiabetes, 		method="kknn",  
+                   preProcess=c("range"), 	
+                   trControl=ctrl1, tuneGrid =tg)
+
+print(mod107.knn)
+mod107.knn$kknn_fit
+
+plot(mod107.knn)
+```
+
+kknn_fit will return the best fitting model. To get the results from all the different models you tuned, look at the kknn_fit$results object.
+
+
+Optimal weighted nearest neighbour classifier ownn in package snn.
+
+
+```{r}
+set.seed(123)
+mod108.knn<- train(diabetes~., data=PimaIndiansDiabetes,	method="ownn", preProcess=c("range"), 
+		trControl=ctrl1, tuneGrid =expand.grid(K=5:7))
+
+print(mod108.knn)
+mod108.knn$kknn_fit
+
+plot(mod108.knn)
+```
+
+## Exercise 9 - student choice of datasets.
