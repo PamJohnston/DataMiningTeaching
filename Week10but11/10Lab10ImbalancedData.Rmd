@@ -1,0 +1,313 @@
+---
+title: "Lab - Imbalanced data - and clustering"
+author: "PJ"
+date: "2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning =FALSE}
+#clear workspace
+rm(list=ls())
+
+
+library(caret)
+library(RColorBrewer)
+library(scales)
+library(cluster)
+library(rattle)
+library(rgl)
+library(fpc)
+library(pvclust)
+library(ggplot2)
+```
+
+Reading the input file
+
+```{r}
+imbData <- read.csv(file="synthetic_imbalance.csv", header=T, sep=",", row.names=1, stringsAsFactors = T)
+
+imbData$class <- as.factor(imbData$class)
+
+View(imbData)
+
+```
+
+
+## A fairly sensible C5.0 classifier so you can see the results - they're probably as good as they can be
+```{r}
+ctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 0, verboseIter=FALSE)
+set.seed(123)
+C5Tree <- train(class ~., data = imbData,
+             method = "C5.0Tree",
+             trControl = ctrl)
+
+# to check accuracy
+print(C5Tree$results)	
+print(C5Tree)
+print(C5Tree$finalModel)
+
+summary(C5Tree)
+
+confusionMatrix.train(C5Tree)
+
+```
+Note that the C5.0 classifier gets 99.38% accuracy, but it's only 50:50 on the minority class. It gets half of the minority class incorrect. It could get 99% accuracy just by classifying everything as class 0.
+
+Try rpart
+
+```{r}
+set.seed(123)
+mod.rpart <- train(class ~., data = imbData,
+             method = "rpart",
+             trControl = ctrl)
+
+# to check accuracy
+print(mod.rpart$results)	
+print(mod.rpart)
+print(mod.rpart$finalModel)
+
+summary(mod.rpart)
+
+confusionMatrix.train(mod.rpart)
+
+```
+rpart is slighyly poorer than the C5.0 tree because it gets slighly more false positives (that is, majority class 0 classified as minority class 1), and slightly fewer true positives (0.4 vs 0.5). It shows even more how difficult it is to classify imbalanced data.
+
+
+## K-means clustering (largely taken from K-means clustering lab!)
+
+### Elbow method
+
+Determine the correct number of clusters via within cluster sum of squares.
+
+```{r}
+# For each value of k, k-means is applied and the within clusters sum of squares calculated.
+set.seed(1)
+wss <- NULL
+for (i in 2:15) 
+	wss[i] <- sum(kmeans(imbData, centers=i, nstart=100, iter.max=1000)$withinss)
+plot(1:15, wss, type="b", xlab="k= Number of Clusters", ylab="Within groups sum of squares")
+wss
+```
+
+k = 4 seems a good compromise.
+
+
+### Silhouette method
+
+```{r}
+# For each value of k, k-means is applied. The average silhouette is calculated.
+set.seed(1)
+
+sil <-NULL
+for (i in 2:15) 
+{ 
+  res <- kmeans(imbData, centers = i, nstart = 25)
+  ss <- silhouette(res$cluster, dist(imbData))
+  sil[i] <- mean(ss[, 3])
+}
+plot(1:15, sil, type="b", xlab="k= Number of Clusters", ylab="Average silhouette")
+```
+
+k=2 appears to be best for clustering here. It's the highest on the chart, and an average silhouette of 0.5 is not particularly tiny.
+
+## Apply k-means with k=4
+
+```{r}
+set.seed(1)
+km <- kmeans(imbData, 4, nstart=25, iter.max=1000)
+```
+
+
+### Viewing results
+
+Checking good separation of clusters (and good cohesion) in 2-D. Are features sufficient to distinguish between the resulting clusters?
+
+
+```{r}
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+
+plot(imbData, col=km$clust, pch=16)
+```
+Is one class dominated by one cluster? Does the cluster appear in the other class?
+
+
+### 3D plotting - various principal components
+
+Visualising the features. The cube can be rotated (in RStudio) to check the clusters from different angles. Are the clusters clear? Do they overlap with the class?
+
+```{r}
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km$clust)
+```
+
+
+### Cluster sizes  - sort clusters by size
+
+```{r}
+sort(table(km$clust))
+clust <- names(sort(table(km$clust)))
+```
+
+The resulting clusters vary in sizes with two clusters dominating and two smaller clusters.
+Note: you may get the same results in a different order - i.e. the cluster label (number) may be different, but the cluster sizes should be the same.
+
+The dataset is too big to visualise as a table.
+
+
+### Compare feature1 by cluster in boxplot
+
+```{r}
+# reprint the "table" for convenience
+sort(table(km$clust))
+clust <- names(sort(table(km$clust)))
+
+
+boxplot(imbData$feature1 ~ km$cluster, 
+        xlab='Cluster', ylab='feature1',
+        main='feature1 by Cluster')
+
+boxplot(imbData$feature2 ~ km$cluster, 
+        xlab='Cluster', ylab='feature2',
+        main='feature2 by Cluster')
+
+```
+
+The shape of the boxplot is the same between clusters. Both features were generated using a normal distribution.
+
+
+## Exercise 1 - using with other clustering algorithms
+
+
+### Lloyd
+
+```{r}
+set.seed(1)
+
+km2 <- kmeans(imbData, 4,  algorithm="Lloyd", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(imbData, col=km2$clust, pch=16)
+
+# 3D plot
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km2$clust)
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km2$clust)
+
+# Cluster sizes
+sort(table(km2$clust))
+clust <- names(sort(table(km2$clust)))
+
+```
+
+
+### Forgy
+
+```{r}
+
+set.seed(1)
+
+km3 <- kmeans(imbData, 4,  algorithm="Forgy", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(imbData, col=km3$clust, pch=16)
+
+# 3D plot
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km3$clust)
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km3$clust)
+
+# Cluster sizes
+sort(table(km3$clust))
+clust <- names(sort(table(km3$clust)))
+
+```
+
+
+### MacQueen
+
+```{r}
+set.seed(1)
+
+km4 <- kmeans(imbData, 4,  algorithm="MacQueen", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(imbData, col=km4$clust, pch=16)
+
+# 3D plot
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km4$clust)
+plot3d(imbData$feature1, imbData$feature2, imbData$class, col=km4$clust)
+
+# Cluster sizes
+sort(table(km4$clust))
+clust <- names(sort(table(km4$clust)))
+```
+
+All methods appear to give the same results. None of the clusters matches the class.
+
+
+
+## Adding the cluster number
+
+```{r}
+# recall delta is the originally loaded dataset
+imbData2 <- imbData
+
+# So delta3 is the originally loaded dataset with the clusters added
+imbData2$cluster <-as.factor(as.character(km$clust))
+
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=3)
+
+set.seed(123)
+# Note: we're training to recognise what the clusters are.
+mod.rpart1 <- train(cluster~., data=imbData2, method="rpart", trControl=ctrl)
+print(mod.rpart1)
+plot(mod.rpart1$finalModel)
+fancyRpartPlot(mod.rpart1$finalModel)
+
+```
+
+## Exercise 2
+
+You can compare the output of the confusion matrix for these with the leaf nodes of the tree above. 
+
+```{r}
+set.seed(123)
+mod.c50 <- train(cluster~., data=imbData2, method="C5.0Tree", trControl=ctrl)
+print(mod.c50)
+summary(mod.c50$finalModel)
+
+```
+C5.0 for imbData2 
+Class does appear on the list of features used, but it is not particularly important.
+
+## Exercise 4 - an even more imbalanced dataset
+
+```{r}
+imbData <- read.csv(file="synthetic_imbalance_3.csv", header=T, sep=",", row.names=1, stringsAsFactors = T)
+
+imbData$class <- as.factor(imbData$class)
+```
+
+```{r}
+ctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 4, verboseIter=FALSE)
+set.seed(123)
+C5Tree <- train(class ~., data = imbData,
+             method = "C5.0Tree",
+             trControl = ctrl)
+
+
+```
+```{r}
+# to check accuracy
+print(C5Tree$results)	
+print(C5Tree)
+print(C5Tree$finalModel)
+
+summary(C5Tree)
+
+confusionMatrix.train(C5Tree)
+
+```
+
