@@ -1,0 +1,332 @@
+---
+title: "Naive Bayes"
+author: "CMM510 class"
+date: "2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code to obtain the results - the  analysis of the results is partly left to the students.
+
+```{r}
+rm(list=ls())
+```
+
+```{r warning=F}
+library(naivebayes)
+library(mlbench) # with pimaIndiansDiabetes dataset
+library(caret)
+library(partykit)   # with WeatherPlay dataset
+
+
+
+```
+
+
+Loading the contact lenses dataset.
+
+```{r}
+contactLenses <- read.csv("contactLenses.csv", header=T,
+                          stringsAsFactors = TRUE)
+```
+
+## Setting experiments
+
+### Setting the evaluation method 
+
+```{r}
+# Using 2 repetitions of cross 5-fold cross validation 
+ctrl <- trainControl(method="repeatedcv", number=5, repeats=2)
+
+set.seed(123)
+
+NBmodW <- train(contactLenses ~., contactLenses,
+             method = "naive_bayes", na.action = na.omit,
+             trControl = ctrl) 
+             
+```
+
+
+Checking accuracy and types of errors by looking at the confusion matrix.
+
+```{r}
+# to check accuracy
+confusionMatrix(NBmodW)
+```
+
+The confusion matrix has the actual classes on columns and predictions on rows. The errors are on instances of "none" contact lenses classed as either "hard" or "soft". Real "hard" and "soft" instances are always correctly predicted.
+
+There is ~ 70% average accuracy overall.
+
+Checking results.
+
+```{r}
+print(NBmodW)
+```
+
+
+Checking the model (table of probabilities).
+
+```{r}
+NBmodW$finalModel
+
+```
+
+### Using Naive Bayes outside caret.
+
+First, obtain a training and a testing set. If you've used Python in the past, you will recognise this procedure. Previously we've used caret and the train function with a trainControl object to split into test and train. Here we do it manually.
+
+```{r}
+set.seed(123)
+# 67% of the data in the training set at the rest in the test set.
+inTrain <- createDataPartition(y = contactLenses$contactLenses,
+                                p = .67,
+                                list = FALSE)
+
+trainingCL <- contactLenses[inTrain,]
+testingCL <- contactLenses[-inTrain,]
+
+# creating a dataset identical to testingCL but without the class (we will use this for testing)
+# classtestingCL <- testingCL$contactLenses
+testingCLnoClass <- testingCL
+testingCLnoClass$contactLenses <- NULL
+```
+
+Ready to apply Naive Bayes to the training set to obtain the model. Notice we're not using caret's train function, we're using a naive_bayes() function.
+
+```{r eval=F}
+set.seed(123)
+
+
+nbCL <- naive_bayes(contactLenses ~ ., trainingCL, laplace=1)
+summary(nbCL)
+nbCL
+nbCL$finalModel
+```
+
+Predicting the class on the testing set - obtaining probabilities for each instance in the test set.
+
+```{r eval=F}
+probsCL <- predict(nbCL,testingCLnoClass,type="prob")
+probsCL
+
+```
+
+Predicting the class on the testing set - obtaining class for each instance in the test set.
+
+```{r eval=F}
+resCL <- predict(nbCL,testingCLnoClass,type="class")
+resCL
+
+# confusion matrix with predicted class vs. real class
+confusionMatrix(resCL,testingCL$contactLenses)
+```
+
+
+Naive bayes outside caret, using all the instances to obtain the model.
+
+
+```{r}
+set.seed(123)
+nbw <- naive_bayes(contactLenses ~ ., contactLenses, laplace=1)
+summary(nbw)
+nbw
+
+```
+
+### Exercise 1
+
+```{r}
+
+set.seed(123)
+
+NBmodW <- train(contactLenses ~., data=trainingCL, method = "naive_bayes",  trControl=trainControl(method="none"), na.action = na.omit, tuneGrid= expand.grid(laplace=1, usekernel=FALSE, adjust=FALSE)
+ )
+```
+
+Checking results.
+
+```{r}
+print(NBmodW)
+NBmodW$finalModel
+
+```
+
+Testing on the testing set.
+
+```{r}
+res <- predict( NBmodW, newdata = testingCL)
+res
+```
+Above are the answers to each of the 6 instances in the testingCL dataset. 
+
+Checking if the predictions (in res) are correct, by comparing them with the expected values.
+
+```{r}
+confusionMatrix(res, testingCL$contactLenses)
+```
+
+Note how while the acccuracy appearsto be around 66%, the 95% confidence interval is very wide  (0.2228, 0.9567), so the margin of error is large. This is because it has only been tested on 6 instances (very small dataset!) and the model was built using only 18 instances.
+
+The performance obtained is not directly comparable to the one obtained using caret as the evaluation method is different (cross validation vs. leave group out).
+
+
+```{r}
+tunegrid = expand.grid(usekernel = c(TRUE, FALSE),
+                         laplace = c(0,0.5,1), 
+                         adjust = c(0.75, 1, 1.25,1.5))
+set.seed(123)
+NBmodW2 <- train(contactLenses ~., data=contactLenses,
+             method = "naive_bayes", na.action = na.omit, 
+             tuneGrid = tunegrid,
+             trControl = ctrl) 
+```
+
+```{r} 
+res2 <- predict( NBmodW2, newdata = testingCL)
+res2
+```
+
+```{r}
+confusionMatrix(res2, testingCL$contactLenses)
+```
+Results are just the same.
+
+
+### Exercise 2
+
+
+Need to binarise both the training and the testing set. 
+
+Binarising attributes in trainingCL.
+
+```{r} 
+# make a copy
+a <- ncol(trainingCL)
+noClass <-trainingCL[, -a]
+
+set.seed(123)
+#binarise nominal attributes - one-hot encoding
+binaryVars <- dummyVars(~ ., data = noClass)
+binTrCL <- data.frame(predict(binaryVars, newdata = noClass))
+
+# add the class to the binarised dataset
+binTrCL$contactLenses <-trainingCL$contactLenses
+
+```
+
+Binarising attributes in testingCL. Note that the class is not needed as the prediction will be done blindly (with no class) The actual class can be obtained from the testingCL dataset.
+
+```{r} 
+# make a copy and remove the class (last attribute with index being same as the number of columns)
+a <- ncol(testingCL)
+noClass <-testingCL[, -a]
+
+
+set.seed(123)
+#binarise nominal attributes - one-hot encoding
+binaryVars <- dummyVars(~ ., data = noClass)
+binTeCL<- data.frame(predict(binaryVars, newdata = noClass))
+
+
+```
+
+
+Now that the dataset has no nominal values (other than the class), apply Naive Bayes.
+
+```{r} 
+set.seed(123)
+nbwTr <- naive_bayes(contactLenses ~ ., binTrCL, laplace=1)
+summary(nbwTr)
+nbwTr
+
+```
+
+Checking predicted results on test set.
+
+```{r}
+resCLTe <- predict(nbwTr,binTeCL,type="class")
+resCLTe
+```
+
+The confusion matrix with predicted class vs. real class is as follows:
+
+
+```{r} 
+confusionMatrix(resCLTe,testingCL$contactLenses)
+```
+Two errors in testing, based on a total of 6 instances. The margin of error is large.
+
+
+### Exercise 3 - pimaIndiansDiabetes dataset.
+
+```{r} 
+set.seed(123)
+## Using the PimaIndiansDiabetes dataset
+data(PimaIndiansDiabetes)
+NBmod <- train(diabetes ~., PimaIndiansDiabetes,
+             method = "naive_bayes", na.action = na.omit,
+             trControl = ctrl) 
+             
+# to check accuracy
+confusionMatrix(NBmod)
+
+# to obtain the model
+print(NBmod$finalModel)
+
+```
+
+
+### Exercise 4 - weather dataset
+
+Using 2 repetitions of cross 5-fold cross validation with the WeatherPlay dataset (in library partykit, loaded earlier).
+
+
+```{r} 
+ctrl <- trainControl(method="repeatedcv", number=5, repeats=2)
+set.seed(123)
+
+NBmodW <- train(play ~., WeatherPlay,
+             method = "naive_bayes", na.action = na.omit, 
+             trControl = ctrl) 
+             
+# to check accuracy
+confusionMatrix(NBmodW)
+
+print(NBmodW)
+NBmodW$finalModel
+
+```
+
+Outside caret - obtain model - to do any testing, the original dataset would need to be partitioned.
+
+```{r}
+
+
+set.seed(123)
+nbw <- naive_bayes(play ~ ., WeatherPlay, laplace=1)
+summary(nbw)
+print(nbw)
+
+```
+
+
+```{r} 
+
+NBmodW <- train(play ~., WeatherPlay,
+             method = "naive_bayes", na.action = na.omit,
+             trControl = ctrl) 
+             
+# to check accuracy
+confusionMatrix(NBmodW)
+
+print(NBmodW)
+NBmodW$finalModel
+
+```
+
+
+
