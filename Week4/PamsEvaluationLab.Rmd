@@ -1,0 +1,122 @@
+---
+title: "Evaluation"
+author: "Pam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Cleaning the working environment.
+
+```{r}
+rm(list=ls())
+```
+
+Import the required libraries
+```{r}
+library(caret)
+library(mlbench)
+library(partykit)
+library(rattle)
+
+```
+Exercise 1: Setting up the trainControl function
+```{r}
+ctrl <- trainControl(method = "repeatedcv", 
+                     number =4, 
+                     repeats = 3,
+                     verboseIter=TRUE)
+# for reproducibility
+set.seed(123)
+# running the c5.0Tree on the iris dataset.
+# Note the use of trControl with the previously defined trainControl
+c5treemod <- train(Species ~ .,
+                   data = iris,
+                   method = "C5.0Tree",
+                   tuneLength = 12,
+                   trControl = ctrl)
+#run values
+c5treemod
+
+#checking results
+summary(c5treemod$finalModel)
+
+```
+Note that Iris has 3 classes (the species of iris plant), and 50 samples of each class. It is known as the "Hello World" of classification datasets.
+
+Exercise 2-3
+The confusion matrix has columns for the predicted class values. The actual class values are in rows. There are 3 versicolor (b) irises that are incorrectly predicted as virginica (c). Overall, 4 samples are incorrectly predicted. All of the confusion is between classes (b) and (c) (the bottom right of the confusion matrix).
+
+Exercise 4-5
+3 nodes, 4 levels in the classification tree. All nodes only involve Petal length and petal width (Sepal length and Sepal width are not included). 
+
+Exercise 6
+A relatively short petal length defines iris setosa.
+
+Exercise 7.
+```{r}
+ctrl <- trainControl(method = "repeatedcv", 
+                     number =4, 
+                     repeats = 3,
+                     verboseIter=TRUE)
+# for reproducibility
+set.seed(123)
+# running the c5.0Tree on the iris dataset.
+# Note the use of trControl with the previously defined trainControl
+c5treemod <- train(Species ~ .,
+                   data = iris,
+                   method = "C5.0Tree",
+                   metric = "Kappa",
+                   trControl = ctrl)
+#run values
+c5treemod
+
+#checking results
+summary(c5treemod$finalModel)
+
+```
+Comparing performance on test sets
+```{r}
+print("********************none***************************")
+confusionMatrix.train(c5treemod, norm="none")
+print("*********************overall***************************")
+confusionMatrix.train(c5treemod, norm="overall")
+print("*********************average***************************")
+confusionMatrix.train(c5treemod, norm="average")
+```
+Exercise 8: 
+The confusion matrices are the other way around: confusionMatrix.train prints the matrix with the actual values as columns and the predictions as rows. 
+
+Exercise 9a (one possible solution for Iris)
+```{r}
+ctrl <- trainControl(method = "repeatedcv", 
+                     number =4, 
+                     repeats = 3,
+                     verboseIter=FALSE)
+# for reproducibility
+set.seed(123)
+
+# Lots of things to train, so using some for loops
+myMethods <- list("C5.0Tree", "C5.0Rules", "rpart", "rpart2", "ctree", "ctree2")
+
+for (myMethod in myMethods) {
+  print("*****************************************")
+  myModel <- train(Species ~ .,
+                   data = iris,
+                   method = myMethod,
+                   trControl = ctrl) 
+  #run values
+  myModel
+  print(myMethod)
+  #checking results
+  #summary(myModel$finalModel)
+  print(confusionMatrix.train(myModel))
+  print("*****************************************")
+}
+```
+
+
