@@ -1,0 +1,533 @@
+---
+title: "Lab - Clustering - Code plus a few comments"
+author: "IA"
+date: "2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning =FALSE}
+#clear workspace
+rm(list=ls())
+
+
+library(caret)
+library(RColorBrewer)
+library(scales)
+library(cluster)
+library(rattle)
+library(rgl)
+library(fpc)
+library(pvclust)
+library(ggplot2)
+```
+
+Reading the input file
+
+```{r}
+delta <- read.csv(file="delta.csv", header=T, sep=",", row.names=1, stringsAsFactors = T)
+
+#View(delta)
+
+```
+
+Apply centering, scaling and principal components analysis (PCA).
+
+```{r}
+pca_delta <- preProcess(delta, method = c("center", "scale", "pca"))
+#pca_delta
+
+delta2 <- predict(pca_delta, newdata = delta)
+
+
+```
+
+
+## K-means clustering
+
+### Elbow method
+
+Determine the correct number of clusters via within cluster sum of squares.
+See: http://www.statmethods.net/advstats/cluster.html [accessed 22/10/24])
+
+```{r}
+# For each value of k, k-means is applied and the within clusters sum of squares calculated.
+set.seed(1)
+wss <- NULL
+for (i in 2:15) 
+	wss[i] <- sum(kmeans(delta2, centers=i, nstart=100, iter.max=1000)$withinss)
+plot(1:15, wss, type="b", xlab="k= Number of Clusters", ylab="Within groups sum of squares")
+wss
+```
+
+k = 4 seems a good compromise.
+
+
+### Silhouette method
+
+```{r}
+# For each value of k, k-means is applied. The average silhouette is calculated.
+set.seed(1)
+
+sil <-NULL
+for (i in 2:15) 
+{ 
+  res <- kmeans(delta2, centers = i, nstart = 25)
+  ss <- silhouette(res$cluster, dist(delta2))
+  sil[i] <- mean(ss[, 3])
+}
+plot(1:15, sil, type="b", xlab="k= Number of Clusters", ylab="Average silhouette")
+```
+
+k=4 appears to be best for clustering. It's the highest on the chart, and an average silhouette of 0.5 is not particularly tiny.
+
+## Apply k-means with k=4
+
+```{r}
+set.seed(1)
+km <- kmeans(delta2, 4, nstart=25, iter.max=1000)
+```
+
+
+### Viewing results
+
+Checking good separation of clusters (and good cohesion) in 2-D. Are 2 principal components sufficient to distinguish between the resulting clusters?
+
+
+```{r}
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+
+plot(delta2, col=km$clust, pch=16)
+```
+
+### 3D plotting - various principal components
+
+Visualising the first 3 principal components. The cube can be rotated (in RStudio) to check the clusters from different angles. Are the clusters clear?
+
+```{r}
+plot3d(delta2$PC1, delta2$PC2, delta2$PC3, col=km$clust)
+```
+
+Visualising principal components 1, 3 and 4.
+
+```{r}
+plot3d(delta2$PC1, delta2$PC3, delta2$PC4, col=km$clust)
+```
+
+### Cluster sizes  - sort clusters by size
+
+```{r}
+sort(table(km$clust))
+clust <- names(sort(table(km$clust)))
+```
+
+The resulting clusters vary in sizes with one cluster having more instances than the other 3 put together. 2 clusters have very few instances.
+
+Note: you may get the same results in a different order - i.e. the cluster label (number) may be different, but the cluster sizes may be the same.
+
+### Getting the instances in each cluster (note, they're in sorted order)
+
+```{r}
+# First cluster - instances
+print("First cluster")
+row.names(delta[km$clust==clust[1],])
+
+# Second Cluster - instances
+print("second cluster")
+row.names(delta[km$clust==clust[2],])
+# Third Cluster - instances
+print("third cluster")
+row.names(delta[km$clust==clust[3],])
+# Fourth Cluster - instances
+print("fourth cluster")
+row.names(delta[km$clust==clust[4],])
+```
+
+
+The first cluster contains only one airplane, the Airbus A319 VIP which is not one Delta normally uses in its fleet – it is used for private hire. The second cluster contains 4 airplanes – the  smallest passenger planes  all offering  only economy seats. The 3rd cluster contains larger planes. The 4th cluster contains even larger planes, although there are some planes in common with the 3rd cluster.
+
+
+### Compare accommodation by cluster in boxplot
+
+```{r}
+# reprint the "table" for convenience
+sort(table(km$clust))
+clust <- names(sort(table(km$clust)))
+
+
+boxplot(delta$Accommodation ~ km$cluster, 
+        xlab='Cluster', ylab='Accommodation',
+        main='Plane Accommodation by Cluster')
+
+boxplot(delta$Wingspan..ft. ~ km$cluster, 
+        xlab='Cluster', ylab='Wingspan',
+        main='Plane Wingspan by Cluster')
+
+boxplot(delta$Seats..Economy. ~ km$cluster, 
+        xlab='Cluster', ylab='Economy Seats',
+        main='Plane Economy seats # by Cluster')
+boxplot(delta$Seat.Pitch..First.Class. ~ km$cluster, 
+        xlab='Cluster', ylab='Seat Pitch First Class',
+        main='Seat Pitch First Class by Cluster')
+```
+
+It can be seen that the clusters correspond to airplane number of seats with a few exceptions.
+
+```{r}
+
+# Compare presence of seat classes in largest clusters
+delta[km$clust==clust[3],30:33]
+delta[km$clust==clust[4],30:33]
+```
+
+With one exception, one cluster has instances with first class accommodation whereas the other one has instances with business class accommodation instead. (Remember to hit Next to see all the pages of results).
+
+## Exercise 1 - using with other clustering algorithms
+
+
+### Lloyd
+
+```{r}
+set.seed(1)
+
+km2 <- kmeans(delta2, 4,  algorithm="Lloyd", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(delta2, col=km2$clust, pch=16)
+
+# 3D plot
+plot3d(delta2$PC1, delta2$PC2, delta2$PC3, col=km2$clust)
+plot3d(delta2$PC1, delta2$PC3, delta2$PC4, col=km2$clust)
+
+# Cluster sizes
+sort(table(km2$clust))
+clust <- names(sort(table(km2$clust)))
+
+# First cluster
+row.names(delta[km2$clust==clust[1],])
+# Second Cluster
+row.names(delta[km2$clust==clust[2],])
+# Third Cluster
+row.names(delta[km2$clust==clust[3],])
+# Fourth Cluster
+row.names(delta[km2$clust==clust[4],])
+```
+
+
+### Forgy
+
+```{r}
+
+set.seed(1)
+
+km3 <- kmeans(delta2, 4,  algorithm="Forgy", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(delta2, col=km3$clust, pch=16)
+
+# 3D plot
+plot3d(delta2$PC1, delta2$PC2, delta2$PC3, col=km3$clust)
+plot3d(delta2$PC1, delta2$PC3, delta2$PC4, col=km3$clust)
+
+# Cluster sizes
+sort(table(km3$clust))
+clust <- names(sort(table(km3$clust)))
+
+# First cluster
+row.names(delta[km3$clust==clust[1],])
+# Second Cluster
+row.names(delta[km3$clust==clust[2],])
+# Third Cluster
+row.names(delta[km3$clust==clust[3],])
+# Fourth Cluster
+row.names(delta[km3$clust==clust[4],])
+```
+
+
+### MacQueen
+
+```{r}
+set.seed(1)
+
+km4 <- kmeans(delta2, 4,  algorithm="MacQueen", nstart=25, iter.max=1000)
+
+palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(delta2, col=km4$clust, pch=15)
+
+# 3D plot
+plot3d(delta2$PC1, delta2$PC2, delta2$PC3, col=km4$clust)
+plot3d(delta2$PC1, delta2$PC3, delta2$PC4, col=km4$clust)
+
+# Cluster sizes
+sort(table(km4$clust))
+clust <- names(sort(table(km4$clust)))
+
+# First cluster
+row.names(delta[km4$clust==clust[1],])
+# Second Cluster
+row.names(delta[km4$clust==clust[2],])
+# Third Cluster
+row.names(delta[km4$clust==clust[3],])
+# Fourth Cluster
+row.names(delta[km4$clust==clust[4],])
+```
+
+All methods appear to give the same results.
+
+
+
+## Adding the cluster number
+
+```{r}
+# recall delta is the originally loaded dataset
+delta3 <- delta
+
+# So delta3 is the originally loaded dataset with the clusters added
+delta3$cluster <-as.factor(as.character(km$clust))
+
+# recall delta2 is the pca'd dataset, so delta4 is the pca'd dataset with clusters.
+delta4 <- delta2
+delta4$cluster <-as.factor(as.character(km$clust))
+
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=3)
+
+set.seed(123)
+# Note: we're training to recognise what the clusters are.
+mod.rpart1 <- train(cluster~., data=delta3, method="rpart", trControl=ctrl)
+print(mod.rpart1)
+plot(mod.rpart1$finalModel)
+fancyRpartPlot(mod.rpart1$finalModel)
+
+set.seed(123)
+mod.rpart2 <- train(cluster~., data=delta4, method="rpart", trControl=ctrl)
+print(mod.rpart2)
+plot(mod.rpart2)
+fancyRpartPlot(mod.rpart2$finalModel)
+
+
+```
+
+## Exercise 2
+
+You can compare the output of the confusion matrix for these with the leaf nodes of the tree above. Remember, the PCA tree above classifies class 3 correctly on one leaf node and all other classes on another. Think how this might look in a confusion matrix.
+
+```{r}
+set.seed(123)
+mod.rpart3 <- train(cluster~., data=delta3, method="C5.0Tree", trControl=ctrl)
+print(mod.rpart3)
+summary(mod.rpart3$finalModel)
+
+set.seed(123)
+mod.rpart4 <- train(cluster~., data=delta4, method="C5.0Tree", trControl=ctrl)
+print(mod.rpart4)
+summary(mod.rpart4$finalModel)
+```
+C5.0 for delta3 (the interpretable attributes):
+classifies based on Seat.Width..First.Class first and then based on the presence of Video (different choices from the rpart).
+Class 1 and class 4 are correct with no misinterpretation (confusion matrix with only "diagonal" entries, i.e. there are 0 incorrect predictions for that class and 0 other classes get that prediction)
+Class 2 (the VIP plane cluster) gets mixed up with class 3, but it is the only instance that is incorrect. In the rpart equivalent, classes 2 and 3 were together, and classes 1 and 4 were together. So there were more errors, and C5.0 is the better classifier.
+
+C5.0 for delta4 (the pca'd attributes classified on clusters)
+Classes 2 and 4 get pushed together (i.e. the singular instance in cluster 2 gets classified as cluster 4). But, again, this is the only error in the classifier, all other instances are correctly classified. Cluster 2, having only a singular instance (which will either go into test or train), is a difficult cluster to get right.
+
+## Exercise 3
+
+## k-medoids
+
+### Apply k-medoids with k=4 
+
+```{r}
+set.seed(1)
+
+kmedoids <- pam(delta2, 4)
+#palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(delta2, col=kmedoids$clust, pch=16)
+
+
+```
+
+Checking cluster sizes.
+
+
+```{r}
+sort(table(kmedoids$clust))
+clust <- names(sort(table(kmedoids$clust)))
+```
+
+
+The cluster sizes are identical to those obtained with k-means. The clusters have different names (numbers) but these are mostly arbitrary.
+
+Checking each cluster (yeah, they're the same as before - same number, same instances in each)
+
+```{r}
+# First cluster
+row.names(delta[kmedoids$clust==clust[1],])
+# Second Cluster
+row.names(delta[kmedoids$clust==clust[2],])
+# Third Cluster
+row.names(delta[kmedoids$clust==clust[3],])
+# Fourth Cluster
+row.names(delta[kmedoids$clust==clust[4],])
+```
+
+
+## Exercise 4 -  check best k using the silouette method.
+
+```{r}
+set.seed(1)
+
+sil <-NULL
+for (i in 2:15) 
+{ 
+  res <- pam(delta2,i)
+  ss <- silhouette(res$cluster, dist(delta))
+  sil[i] <- mean(ss[, 3])
+}
+
+
+plot(1:15, sil, type="b", xlab="k= Number of Clusters", ylab="Average silhouette")
+
+```
+
+Notice that this method gives k=2 as the best number of clusters.
+Apply k-medoids with k=2 
+
+```{r}
+set.seed(1)
+
+kmedoids <- pam(delta2, 2)
+```
+
+
+
+Viewing results.
+
+```{r}
+#palette(alpha(brewer.pal(9,'Set1'), 0.5))
+plot(delta2, col=kmedoids$clust, pch=16)
+sort(table(kmedoids$clust))
+```
+
+```{r}
+## Having a look at an rpart classifier based on these new clusters (extra, but really nice to do)
+# recall delta2 is the pca'd dataset, so delta4 is the pca'd dataset with clusters.
+delta5 <- delta2
+delta5$cluster <-as.factor(as.character(kmedoids$clust))
+
+set.seed(123)
+mod.rpart3 <- train(cluster~., data=delta5, method="rpart", trControl=ctrl)
+print(mod.rpart3)
+plot(mod.rpart3)
+fancyRpartPlot(mod.rpart3$finalModel)
+
+```
+Notice how, with only 2 clusters based on k-medoids (rather than k-means), we can train a very simple rpart decision tree that gets everything right (no errors, 100% accuracy) based only on a single principal component (PCA1). If you want to, you can produce a box plot and similar plots for the non-PCA delta dataset.
+
+
+## Hierarchical clustering
+
+  
+### Using  Euclidean distance
+
+```{r}
+d <- dist(delta2, method = "euclidean") 
+hc <- hclust(d, method="single")
+
+# display dendogram
+# plot.init()
+plot(hc) 
+
+# cutting tree into 4 clusters
+groups <- cutree(hc, k=4) 
+
+# drawing dendogram with red borders around the 4 clusters
+rect.hclust(hc, k=4, border="red") 
+```
+
+2 clusters contain just one instance. One cluster contains 4 instances and the fourth one contains the rest of the instances.
+
+## Exercise 5 Using Manhattan distance
+
+```{r}
+d2 <- dist(delta2, method = "manhattan") 
+hc2 <- hclust(d2, method="single")
+
+# display dendogram
+#plot.init()
+plot(hc2) 
+
+# cutting tree into 4 clusters
+groups <- cutree(hc2, k=4) 
+
+# drawing dendogram with red borders around the 4 clusters
+rect.hclust(hc2, k=4, border="red") 
+```
+
+The clustering obtained is the same as with the Euclidean distance.
+
+
+## Exercise 6
+
+Using complete link.
+
+```{r}
+d <- dist(delta2, method = "euclidean") 
+hc <- hclust(d, method="complete")
+
+# display dendogram
+# plot.init()
+plot(hc) 
+
+# cutting tree into 4 clusters
+groups <- cutree(hc, k=4) 
+
+# drawing dendogram with red borders around the 4 clusters
+rect.hclust(hc, k=4, border="red") 
+```
+
+The clustering has changed when compared to single link. Clusters 1 and 3 are the same as clusters obtained with single link but clusters 2 and 4 are very different. The clsutering looks the same as the one obtained using kmeans.
+
+Using  centroid.
+
+```{r}
+d <- dist(delta2, method = "euclidean") 
+hc <- hclust(d, method="centroid")
+
+# display dendogram
+# plot.init()
+plot(hc) 
+
+# cutting tree into 4 clusters
+groups <- cutree(hc, k=4) 
+
+# drawing dendogram with red borders around the 4 clusters
+rect.hclust(hc, k=4, border="red") 
+```
+
+The clustering is the same as the one obtained using single link.
+
+Using group average.
+
+```{r}
+d <- dist(delta2, method = "euclidean") 
+hc <- hclust(d, method="average")
+
+# display dendogram
+# plot.init()
+plot(hc) 
+
+# cutting tree into 4 clusters
+groups <- cutree(hc, k=4) 
+
+# drawing dendogram with red borders around the 4 clusters
+rect.hclust(hc, k=4, border="red") 
+```
+
+The clustering is the same as the one obtained using single link.
+
+All schemas produce the same clustering except complete link, where the clustering is different. In most cases, 2 clusters contain just one instance. For complete link only one cluster contains one instance, a 2nd cluster contains 4 instances, a 3rd one contains 15 instances and the 4th one contains the rest of the instances.
+
+ 
