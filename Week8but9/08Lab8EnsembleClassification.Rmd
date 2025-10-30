@@ -1,0 +1,422 @@
+---
+title: "Ensemble Prediction - code and brief comments"
+author: "Pamela Johnston"
+date: "2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+rm(list=ls())
+
+```
+
+
+```{r warning=F}
+library(mlbench)
+library(caret)
+library(caretEnsemble)
+library(gbm)
+library(adabag)
+```
+
+
+Check the ionosphere dataset - lots of instances, lots of attributes! But yes, all the attributes are helpfully called V1, V2...
+
+```{r}
+data(Ionosphere)
+ionos <- Ionosphere
+summary(ionos)
+# inspecting the data - use View(ionos) if running only R block and head(ionos,10)  if knitting.
+head(ionos,10)
+```
+
+Remove second attribute as it is always zero.
+
+```{r}
+ionos <- ionos[,-2]
+```
+
+
+The first variable can take the value of zero or one. To ensure it is taken as a numeric value, convert to numeric. This is similar to loading a file with the stringsAsFactors parameter set to TRUE, but wanting numeric values.
+
+The class needs to be a factor.
+
+```{r}
+ionos$V1 <- as.numeric(as.character(ionos$V1))
+
+ionos$Class <- factor(ionos$Class)
+```
+
+
+
+
+## BOOSTING	
+ 
+Boosting is a time-consuming classification method. We set the evaluation method cross validation.The number of repeats is set to 1 to speed up execution. Ideally we would want this number to be higher, e.g. 3.
+ 
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=1)
+```
+
+### C5.0 with and without boosting
+
+We want to compare C5.0 with and without boosting. With boosting, the number of boosted trials is higher than 1. Below we use 9 trials.
+
+```{r}
+tunec50Grid <- expand.grid(trials = 1,
+                       model = c( "tree"),
+                       winnow = c(FALSE))
+
+tunec50Boost <- expand.grid(trials = 9,
+                       model = "tree",
+                       winnow = FALSE)
+set.seed(123)
+C5.0.mod <- train(Class~., data=ionos, method="C5.0", metric="Accuracy", trControl=control, tuneGrid=tunec50Grid)
+
+C5.0.modBoost <- train(Class~., data=ionos, method="C5.0", metric="Accuracy", trControl=control, tuneGrid=tunec50Boost)
+```
+Notice that the above trains the models, but doesn't output anything useful. the cells below output the objects. Output the models and compare the accuracy and kappa.
+### Exercise 1
+
+```{r}
+C5.0.mod
+```
+
+
+```{r}
+C5.0.modBoost
+```
+Accuracy is slightly "better" on the boosted model.
+
+```{r}
+confusionMatrix(C5.0.mod)
+```
+
+
+```{r}
+confusionMatrix(C5.0.modBoost)
+```
+
+It can be seen that the accuracy has increased from 89.74% to 92.59 The confusion matrices show that boosting improves every "true goods", but "true bads" (the 0 class) is actually decreased on average. "False goods" is also increased in the boosted model, but "false bads" is a lot less.
+
+```{r}
+
+# collect resamples
+results <- resamples(list(C5Tree=C5.0.mod, boostedC5Tree=C5.0.modBoost))
+
+# show accuracy and kappa details
+results
+summary(results)
+
+```
+
+Showing the results graphically at 95% confidence.
+
+```{r}
+scales <- list(x=list(relation="free"), y=list(relation= "free"))
+dotplot(results, scales=scales, conf.level = 0.95)
+
+```
+
+It can be seen that the difference is results is not statistically significant. The accuracy and Kappa graphs overlap.
+
+
+
+
+#### Exercise 2
+
+(While doing this, useful to note how long things take to run and the presence of the green line)
+
+##### Creating a model with 5.0
+
+```{r warning=F}
+
+set.seed(123)
+C5.0.mod <- train(Class~., data=ionos, method="C5.0", metric="Accuracy", trControl=control)
+
+```
+
+
+##### Creating a model with  CART
+
+
+```{r}
+
+set.seed(123)
+rpart.mod <- train(Class~., data=ionos, method="rpart", metric="Accuracy", trControl=control)
+
+```
+
+
+
+
+##### Creating a model with  AdaBoost (not run as it takes a long time, but should be done in about 15 minutes or less)
+
+```{r}
+
+set.seed(123)
+adabo.mod <- train(Class~., data=ionos, method="AdaBoost.M1", metric="Accuracy", trControl=control, verbose=FALSE)
+```
+
+
+##### Creating a model with  Extreme gradient boosting - also takes a while to run.
+
+```{r}
+set.seed(123)
+xgb.mod <- train(Class~., data=ionos, method="xgbTree", metric="Accuracy", trControl=control, verbose=FALSE)
+```
+
+#### Creating a model with Stochastic Gradient Boosting
+
+```{r}
+set.seed(123)
+gbm.mod <- train(Class~., data=ionos, method="gbm", metric="Accuracy", trControl=control, verbose=FALSE)
+```
+
+#### Summarise  the results
+
+```{r}
+results2 <- resamples(list(C5.0 = C5.0.mod, CART=rpart.mod, # adaboost= adabo.mod,
+                           xgb=xgb.mod, gbm=gbm.mod))
+summary(results2)
+```
+
+
+
+```{r}
+dotplot(results2)
+```
+
+The intervals for  Adaboost, XGB, C5.0 and GBM are very similar.  CART, however, performs well below the other algorithms, and the difference in performance is statistically significant with respect to almost all other algorithms (but not gbm).
+
+
+```{r}
+
+confusionMatrix(C5.0.mod)
+confusionMatrix(rpart.mod)
+#confusionMatrix(adabo.mod)
+confusionMatrix(xgb.mod)
+confusionMatrix(gbm.mod)
+```
+
+It can be seen that there are some (generally small) differences between algorithms in their detection of true positives (TP) and true negatives (TN), with some detecting more TPs and some detecting more TNs. CART peforms worst in both TP and TN detection. 
+
+### Variable importance for each model - looking at top 10
+
+Producing a table with the most important attributes for each algorithm.
+
+```{r}
+C5.0 <- row.names(varImp(C5.0.mod)$importance)
+CART <- row.names(varImp(rpart.mod)$importance)
+# adaBoost <- row.names(varImp(adabo.mod)$importance)
+xgb <- row.names(varImp(xgb.mod)$importance)
+gbm <- row.names(varImp(gbm.mod)$importance)
+imp <- data.frame(C5.0, CART, # adaBoost, 
+                  xgb, gbm)
+knitr::kable(imp[1:10,])
+```
+
+Looking at the 4 best-performing algorithms, 2 (or three with adaBoost) use V1 as the most important attribute and 1 uses V5. V3 appears close to the top for all algorithms (except CART, which is the poorest classifier).
+
+##### Exercise 3
+
+```{r}
+plot(varImp(C5.0.mod), top=10, main="Variable importance - C5.0", xlab="importance", ylab= "Variable")
+plot(varImp(rpart.mod), top=10,main="Variable importance - CART", xlab="importance", ylab= "Variable")
+plot(varImp(adabo.mod), top=10, main="Variable importance - Adaboost", xlab="importance", ylab= "Variable")
+plot(varImp(xgb.mod), top=10, main="Variable importance - Extreme gradient descent", xlab="importance", ylab= "Variable")
+plot(varImp(gbm.mod), top=10, main="Variable importance - Stochastic gradient boosting", xlab="importance", ylab= "Variable")
+```
+
+While the algorithms share some of the important variables, there are clear differences in the order and their relative importance. Consider how Boosting works compared to C5.0. Some features will appear repeatedly in subsequent models where their weights (and importance) will increase.
+
+## BAGGING
+
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=1)
+```
+
+
+
+##### CART
+
+```{r}
+set.seed(123)
+rpart.mod <- train(Class~., data=ionos, method="rpart", metric="Accuracy", trControl=control)
+```
+
+##### Exercise 4 Building models for the rest of the algorithms.
+
+##### Bagged Ada (commented out as it takes a really long time - like 3 minutes!!)
+
+```{r}
+set.seed(123)
+adab.mod <- train(Class~., data=ionos, method="AdaBag", metric="Accuracy", trControl=control, verbose=FALSE)
+```
+
+##### Bagged CART
+
+```{r}
+set.seed(123)
+bcart.mod <- train(Class~., data=ionos, method="treebag", metric="Accuracy", trControl=control)
+```
+
+##### Random Forest
+
+```{r}
+set.seed(123)
+rf.mod <- train(Class~., data=ionos, method="rf", metric="Accuracy", trControl=control)
+```
+
+
+##### Summarize results
+
+Note that AdaBag has been commented out as it was not run (it takes, like, 3 minutes)
+
+```{r}
+results3 <- resamples(list(CART = rpart.mod,  # adabag = adab.mod, 
+                           treebag=bcart.mod,  rf=rf.mod))
+summary(results3)
+```
+
+Adabag and random forest have the highest maximum accuracy. The mean accuracy is highest for random forest, followed by adabag and then treebag. These differences in performance may not be statistically significant.
+
+```{r}
+dotplot(results3)
+```
+
+All intervals overlap so the difference in performance is not statistically significant. Except that CART and rf do not overlap, so random forest is statistically significantly better at 95%.
+
+```{r}
+confusionMatrix(rpart.mod)
+# confusionMatrix(adab.mod)
+confusionMatrix(bcart.mod)
+confusionMatrix(rf.mod)
+
+```
+
+Random forest absolutely (predictably) wins. It's faster than the others and gives better accuracy.
+```{r}
+set.seed(123)
+mtry <- floor(sqrt(ncol(ionos)))
+mtrylist <- c(mtry, mtry+2, mtry+4)
+tunegrid <- expand.grid(.mtry=mtrylist)
+rf.mod2 <- train(Class~., data=ionos, 
+              method="rf", metric="Accuracy", trControl=control, 
+              tuneGrid=tunegrid, na.action=na.omit)
+confusionMatrix(rf.mod2)
+print(rf.mod2)
+```
+So in this case, using the default parameter for the number of attributes to select for each node seems to work just fine (5 attributes was optimal, 7 and 9 dropped the accuracy and kappa very slightly)
+
+```{r}
+set.seed(123)
+rf.mod3 <- train(Class~., data=ionos, 
+method="rf", metric="Accuracy", trControl=control,
+tuneLength=12, na.action=na.omit)
+confusionMatrix(rf.mod3)
+print(rf.mod3)
+```
+In this case, 5 was our previous best value, but 4 gives a marginally better accuracy and kappa. Our random forest should use 4 attributes to choose from at each node.
+
+
+## STACKING
+
+
+### Data partition creation
+
+Creating the partitions once for 3 repeats of 10-fold cross validation. They will be applied to all algorithms.
+
+```{r}
+set.seed(123)
+all3repeats <- createMultiFolds(ionos$Class, 3, 10)
+```
+
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions='final',  index=all3repeats, classProbs=TRUE)
+```
+
+
+#### Base model definition
+
+```{r}
+# listing algorithms to be used
+baseAlgo <- c('lda', 'rpart',  'knn', "C5.0Tree", "C5.0Rules")
+
+# running the algorithms
+set.seed(123)
+baseModels <- caretList(Class~., data=ionos, trControl=control, metric='Accuracy', methodList=baseAlgo)
+
+```
+
+
+Checking the results
+
+```{r}
+results4 <- resamples(baseModels)
+summary(results4)
+dotplot(results4)
+```
+
+C5Tree and C5.0Rules have the highest accuracy, and the difference in performance is statistically significant. kNN performs worst.
+
+
+### Checking correlations are not > .75
+
+The correlations between the various algorithm results are below. The algorithms should have "low" correlation, i.e. be experts in different classifications.
+
+```{r}
+modelCor(results4)
+splom(results4)
+```
+We can see that C5.0Tree and C5.0Rules have very high correlation, so we remove one of them, i.e. C5.0Tree.
+
+##### Exercise 5 - Redefining the list of base algorithms.
+
+```{r}
+# listing algorithms to be used
+baseAlgo <- c('lda', 'rpart',  'knn', "C5.0Rules")
+
+```
+
+###### Using random forest for stacking
+
+Setting the train control.
+
+```{r}
+stackControl <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions='final', classProbs=TRUE)
+```
+
+```{r}
+
+set.seed(123)
+stack.rf <- caretStack(baseModels, method="rf", metric="Accuracy", trControl=stackControl)
+print(stack.rf)
+```
+
+The accuracy is a little higher than with the individual models, similar to the one obtained with GLM.
+
+
+
+
+##### Exercise 6
+
+
+###### Using C5.0 for stacking
+
+```{r}
+set.seed(123)
+stack.c50 <- caretStack(baseModels, method="C5.0", metric="Accuracy", trControl=stackControl)
+print(stack.c50)
+```
+
+The highest accuracy is 0.94.01% which is higher than using  random forest, although the difference in performance may not be statistically significant.
+
+
+
